@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generator Grafików</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Chosen Palette: Warm Neutrals (Tailwind bg-amber-50, text-slate, accent-sky) -->
+    <!-- Application Structure Plan: A task-oriented single-page application for generating monthly work schedules for a dynamic number of individuals. The structure is divided into two main sections: 1. Configuration: Dynamic input fields for participant names and holidays, and dropdowns for selecting the month and year. Includes save/load state functionality. 2. Schedule Display: A dynamic table presenting the selected month's days, with columns for each participant, and interactive dropdowns for assigning daily statuses (e.g., 'Praca', 'Wolne'). This structure is chosen to provide a clear, sequential workflow: configure, then generate/view the schedule. -->
+    <!-- Visualization & Content Choices: Report Info: Manual schedule creation. Goal: Automate schedule generation and management for a dynamic number of people. Viz/Method: An interactive HTML table is used to represent the monthly schedule. Each cell for a given day and person contains a `<select>` dropdown for status assignment. Interaction: Users can add/remove participants, select month/year, input holiday dates, manually interact with dropdowns, click a button to auto-generate a fair schedule, and now restore a previously saved state. The table updates dynamically based on these interactions. Justification: A table is the most intuitive and direct representation for a daily schedule, allowing clear overview and easy modification. Dropdowns ensure consistent data entry. Auto-generation adds significant utility for fair fair distribution. Dynamic participant management enhances flexibility. Save/Load state improves user experience by persisting data. Library/Method: Pure HTML, CSS (Tailwind), and Vanilla JavaScript for table generation and interaction, localStorage for state persistence. Image generation via html2canvas. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        .table-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23007CB2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 0.65rem auto;
+            padding-right: 2rem;
+        }
+    </style>
+</head>
+<body class="bg-amber-50 text-slate-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-900">Generator Grafików</h1>
+            <p class="mt-2 text-lg text-slate-600">Stwórz grafik pracy na wybrany miesiąc dla dowolnej liczby osób.</p>
+        </header>
+
+        <main class="space-y-12">
+            
+            <section id="configuration" class="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+                <h2 class="text-2xl font-bold mb-4">Konfiguracja grafiku</h2>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">Zarządzaj osobami</h3>
+                    <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                        <input type="text" id="new-person-name" placeholder="Wpisz imię nowej osoby..." class="flex-grow p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
+                        <button id="add-person-btn" class="bg-sky-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-sky-700 transition-colors shadow">Dodaj osobę</button>
+                        <button id="remove-last-person-btn" class="bg-red-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-red-600 transition-colors shadow">Usuń ostatnią osobę</button>
+                    </div>
+                    
+                    <div id="person-inputs-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Dynamic person name inputs will be rendered here -->
+                    </div>
+                    <div id="holiday-inputs-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                        <!-- Dynamic holiday inputs will be rendered here -->
+                    </div>
+                    <div id="exact-work-days-inputs-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                        <!-- Dynamic exact work days inputs will be rendered here -->
+                    </div>
+                     <div id="new-person-status-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                        <!-- Dynamic "Nowa osoba" checkboxes will be rendered here -->
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">Urlopy (format: Dzień lub Dzień-Dzień, oddzielone przecinkami)</h3>
+                    <div id="holiday-fields-wrapper">
+                        <!-- Holiday inputs will be rendered dynamically inside person-inputs-container -->
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xl font-semibold mb-3">Wybierz miesiąc i rok</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="month-select" class="block text-sm font-medium text-slate-700 mb-1">Miesiąc:</label>
+                            <select id="month-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
+                                <!-- Options will be generated by JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label for="year-select" class="block text-sm font-medium text-slate-700 mb-1">Rok:</label>
+                            <select id="year-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition">
+                                <!-- Options will be generated by JS -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 text-center flex flex-col sm:flex-row justify-center gap-4">
+                    <button id="generate-schedule-btn" class="bg-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors shadow">Generuj Grafik Automatycznie</button>
+                    <button id="restore-schedule-btn" class="bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-yellow-700 transition-colors shadow">Przywróć ostatni grafik</button>
+                </div>
+            </section>
+            
+            <section id="schedule-section" class="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
+                <h2 class="text-2xl font-bold mb-4"><span id="current-month-year" class="uppercase"></span></h2>
+                <div class="table-container rounded-lg border border-slate-200">
+                    <table id="schedule-table" class="min-w-full divide-y divide-slate-200">
+                        <thead id="schedule-table-head" class="bg-sky-100">
+                        </thead>
+                        <tbody id="schedule-table-body" class="bg-white divide-y divide-slate-200">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-6 text-center flex flex-col sm:flex-row justify-center gap-4">
+                    <button id="export-excel-btn" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 transition-colors shadow">Generuj tabelę Excel (CSV)</button>
+                    <button id="export-image-btn" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors shadow">Generuj zdjęcie tabeli (PNG)</button>
+                </div>
+            </section>
+
+        </main>
+        
+        <footer class="text-center mt-12 text-slate-500">
+            <p>Stworzone, by ułatwić planowanie grafików.</p>
+        </footer>
+
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const monthSelect = document.getElementById('month-select');
+        const yearSelect = document.getElementById('year-select');
+        const newPersonNameInput = document.getElementById('new-person-name');
+        const addPersonBtn = document.getElementById('add-person-btn');
+        const removeLastPersonBtn = document.getElementById('remove-last-person-btn');
+        const personInputsContainer = document.getElementById('person-inputs-container');
+        const holidayInputsContainer = document.getElementById('holiday-inputs-container');
+        const exactWorkDaysInputsContainer = document.getElementById('exact-work-days-inputs-container');
+        const newPersonStatusContainer = document.getElementById('new-person-status-container');
+        
+        const scheduleTable = document.getElementById('schedule-table');
+        const scheduleTableHead = document.getElementById('schedule-table-head');
+        const scheduleTableBody = document.getElementById('schedule-table-body');
+        const currentMonthYearSpan = document.getElementById('current-month-year');
+        const exportExcelBtn = document.getElementById('export-excel-btn');
+        const exportImageBtn = document.getElementById('export-image-btn');
+        const generateScheduleBtn = document.getElementById('generate-schedule-btn');
+        const restoreScheduleBtn = document.getElementById('restore-schedule-btn');
+
+        let participants = [];
+        let nextPersonId = 1;
+
+        const weekdayShiftOptions = [
+            { value: 'Wolne', label: 'Wolne' },
+            { value: '10-21', label: '10-21' },
+            { value: 'Urlop', label: 'Urlop' },
+            { value: 'Chorobowe', label: 'Chorobowe' }
+        ];
+
+        const weekendShiftOptions = [
+            { value: 'Wolne', label: 'Wolne' },
+            { value: '9-20', label: '9-20' },
+            { value: 'Urlop', label: 'Urlop' },
+            { value: 'Chorobowe', label: 'Chorobowe' }
+        ];
+
+        function isWorkShift(value) {
+            return value === '10-21' || value === '9-20';
+        }
+
+        function populateMonthYearSelectors() {
+            const currentYear = new Date().getFullYear();
+            const currentMonth = new Date().getMonth();
+
+            monthSelect.innerHTML = '';
+            yearSelect.innerHTML = '';
+
+            for (let i = 0; i < 12; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = new Date(currentYear, i, 1).toLocaleString('pl-PL', { month: 'long' });
+                monthSelect.appendChild(option);
+            }
+            monthSelect.value = currentMonth;
+
+            for (let i = currentYear - 2; i <= currentYear + 5; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                yearSelect.appendChild(option);
+            }
+            yearSelect.value = currentYear;
+        }
+
+        function getDaysInMonth(year, month) {
+            return new Date(year, month + 1, 0).getDate();
+        }
+
+        function parseHolidayDates(holidayString, year, month) {
+            const holidays = new Set();
+            if (!holidayString) return holidays;
+
+            const parts = holidayString.split(',').map(p => p.trim()).filter(p => p);
+
+            parts.forEach(part => {
+                if (part.includes('-')) {
+                    const [startDayStr, endDayStr] = part.split('-');
+                    const startDay = Number(startDayStr);
+                    const endDay = Number(endDayStr);
+
+                    if (isNaN(startDay) || isNaN(endDay)) return;
+
+                    let startDate = new Date(year, month, startDay);
+                    let endDate = new Date(year, month, endDay);
+
+                    if (startDate.getMonth() !== month || endDate.getMonth() !== month || startDate.getFullYear() !== year || endDate.getFullYear() !== year) {
+                        return;
+                    }
+
+                    let currentDate = new Date(startDate);
+                    while (currentDate <= endDate) {
+                        holidays.add(currentDate.toISOString().split('T')[0]);
+                        currentDate.setDate(currentDate.getDate() + 1);
+                    }
+                } else {
+                    const day = Number(part);
+                    if (isNaN(day)) return;
+                    const date = new Date(year, month, day);
+                    if (date.getMonth() === month && date.getFullYear() === year) {
+                        holidays.add(date.toISOString().split('T')[0]);
+                    }
+                }
+            });
+            return holidays;
+        }
+
+        function renderPersonInputs() {
+            personInputsContainer.innerHTML = '';
+            holidayInputsContainer.innerHTML = '';
+            exactWorkDaysInputsContainer.innerHTML = '';
+            newPersonStatusContainer.innerHTML = '';
+
+            participants.forEach(person => {
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.id = `person-${person.id}-name`;
+                nameInput.value = person.name;
+                nameInput.className = 'person-name-input p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition';
+                nameInput.placeholder = `Imię osoby ${person.id}`;
+                nameInput.addEventListener('input', (e) => {
+                    person.name = e.target.value;
+                    renderSchedule();
+                    saveScheduleState();
+                });
+                personInputsContainer.appendChild(nameInput);
+
+                const holidayInput = document.createElement('input');
+                holidayInput.type = 'text';
+                holidayInput.id = `person-${person.id}-holidays`;
+                holidayInput.value = person.holidays;
+                holidayInput.placeholder = 'np. 1, 5-7';
+                holidayInput.className = 'holiday-input p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition';
+                holidayInput.addEventListener('input', (e) => {
+                    person.holidays = e.target.value;
+                    saveScheduleState();
+                });
+                holidayInputsContainer.appendChild(holidayInput);
+
+                const exactWorkDaysInput = document.createElement('input');
+                exactWorkDaysInput.type = 'number';
+                exactWorkDaysInput.id = `person-${person.id}-exact-work-days`;
+                exactWorkDaysInput.value = person.exactWorkDays;
+                exactWorkDaysInput.placeholder = 'Dokładna liczba dni pracy (opcjonalnie)';
+                exactWorkDaysInput.className = 'exact-work-days-input p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition';
+                exactWorkDaysInput.addEventListener('input', (e) => {
+                    person.exactWorkDays = e.target.value;
+                    saveScheduleState();
+                });
+                exactWorkDaysInputsContainer.appendChild(exactWorkDaysInput);
+
+                const newPersonCheckboxDiv = document.createElement('div');
+                newPersonCheckboxDiv.className = 'flex items-center justify-center p-3 border border-slate-300 rounded-lg bg-white';
+                newPersonCheckboxDiv.innerHTML = `
+                    <input type="checkbox" id="person-${person.id}-is-new" class="is-new-checkbox mr-2 h-5 w-5 text-sky-600 focus:ring-sky-500 border-slate-300 rounded" ${person.isNew ? 'checked' : ''}>
+                    <label for="person-${person.id}-is-new" class="text-sm font-medium text-slate-700">Nowa osoba</label>
+                `;
+                newPersonCheckboxDiv.querySelector('.is-new-checkbox').addEventListener('change', (e) => {
+                    person.isNew = e.target.checked;
+                    saveScheduleState();
+                });
+                newPersonStatusContainer.appendChild(newPersonCheckboxDiv);
+            });
+        }
+
+        function addPerson() {
+            const newName = newPersonNameInput.value.trim();
+            const defaultName = `Osoba ${nextPersonId}`;
+            participants.push({
+                id: `person-${nextPersonId}`,
+                name: newName || defaultName,
+                holidays: '',
+                exactWorkDays: '',
+                isNew: false // Default to not new
+            });
+            nextPersonId++;
+            newPersonNameInput.value = '';
+            renderPersonInputs();
+            renderSchedule();
+            saveScheduleState();
+        }
+
+        function removeLastPerson() {
+            if (participants.length > 1) { // Ensure at least one person remains
+                participants.pop();
+                renderPersonInputs();
+                renderSchedule();
+                saveScheduleState();
+            }
+        }
+
+        function renderSchedule(autoGeneratedSchedule = null) {
+            const selectedMonth = parseInt(monthSelect.value);
+            const selectedYear = parseInt(yearSelect.value);
+            const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+            
+            const currentPersonNames = participants.map(p => p.name);
+
+            currentMonthYearSpan.textContent = `${new Date(selectedYear, selectedMonth, 1).toLocaleString('pl-PL', { month: 'long' }).toUpperCase()}`;
+
+            let headRow = '<tr><th class="py-3 px-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Data</th><th class="py-3 px-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dzień tygodnia</th>';
+            currentPersonNames.forEach(name => {
+                headRow += `<th class="py-3 px-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">${name}</th>`;
+            });
+            headRow += '</tr>';
+            scheduleTableHead.innerHTML = headRow;
+            scheduleTableHead.classList.add('bg-sky-100');
+
+            scheduleTableBody.innerHTML = '';
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(selectedYear, selectedMonth, day);
+                const dayOfWeek = date.getDay();
+
+                const currentShiftOptions = (dayOfWeek === 0 || dayOfWeek === 6) ? weekendShiftOptions : weekdayShiftOptions;
+
+                const shortDateString = date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+                const dayOfWeekName = date.toLocaleDateString('pl-PL', { weekday: 'long' });
+                
+                let bodyRow = `<tr class="hover:bg-amber-50"><td class="py-3 px-4 whitespace-nowrap text-sm font-medium text-slate-900">${shortDateString}</td><td class="py-3 px-4 whitespace-nowrap text-sm font-medium text-slate-900">${dayOfWeekName}</td>`;
+                
+                currentPersonNames.forEach((_, personIndex) => {
+                    const cellId = `cell-${day}-${personIndex}`;
+                    const assignedValue = (autoGeneratedSchedule && autoGeneratedSchedule[day - 1] && autoGeneratedSchedule[day - 1][personIndex] !== undefined) ? autoGeneratedSchedule[day - 1][personIndex] : 'Wolne';
+                    
+                    bodyRow += `<td class="py-2 px-4 whitespace-nowrap">
+                        <select id="${cellId}" class="shift-select w-full p-2 border-slate-200 rounded-md bg-white hover:bg-slate-50 focus:ring-1 focus:ring-sky-500 focus:border-sky-500 transition ${isWorkShift(assignedValue) ? 'font-bold' : ''}">`;
+                    currentShiftOptions.forEach(option => {
+                        bodyRow += `<option value="${option.value}" ${option.value === assignedValue ? 'selected' : ''}>${option.label}</option>`;
+                    });
+                    bodyRow += `</select></td>`;
+                });
+                bodyRow += '</tr>';
+                scheduleTableBody.innerHTML += bodyRow;
+            }
+            
+            updateConsecutiveWorkHighlighting();
+            
+            document.querySelectorAll('.shift-select').forEach(select => {
+                select.addEventListener('change', (event) => {
+                    const changedSelect = event.target;
+                    if (isWorkShift(changedSelect.value)) {
+                        changedSelect.classList.add('font-bold');
+                    } else {
+                        changedSelect.classList.remove('font-bold');
+                    }
+                    updateConsecutiveWorkHighlighting();
+                    saveScheduleState();
+                });
+            });
+        }
+
+        function generateFairSchedule() {
+            const selectedMonth = parseInt(monthSelect.value);
+            const selectedYear = parseInt(yearSelect.value);
+            const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+            
+            // Get current participant data including isNew status
+            const currentParticipantsData = participants.map(p => ({
+                name: p.name,
+                isNew: p.isNew,
+                holidays: parseHolidayDates(p.holidays, selectedYear, selectedMonth),
+                exactWorkDays: p.exactWorkDays !== '' ? parseInt(p.exactWorkDays) : null
+            }));
+
+            const generatedSchedule = [];
+            const workCounts = new Map(currentParticipantsData.map(p => [p.name, 0]));
+            const consecutiveWorkDays = new Map(currentParticipantsData.map(p => [p.name, 0]));
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const currentDate = new Date(selectedYear, selectedMonth, day);
+                const currentDayISO = currentDate.toISOString().split('T')[0];
+                const dayOfWeek = currentDate.getDay();
+                const shiftType = (dayOfWeek === 0 || dayOfWeek === 6) ? '9-20' : '10-21';
+
+                const daySchedule = Array(currentParticipantsData.length).fill('Wolne');
+
+                const availableWorkersForDay = [];
+                currentParticipantsData.forEach(p => {
+                    if (!p.holidays.has(currentDayISO)) {
+                        availableWorkersForDay.push({
+                            name: p.name,
+                            totalWork: workCounts.get(p.name),
+                            consecutive: consecutiveWorkDays.get(p.name),
+                            exactWorkDays: p.exactWorkDays,
+                            isNew: p.isNew
+                        });
+                    } else {
+                        daySchedule[currentParticipantsData.indexOf(p)] = 'Urlop';
+                        consecutiveWorkDays.set(p.name, 0);
+                    }
+                });
+
+                // Sort available workers for assignment priority
+                availableWorkersForDay.sort((a, b) => {
+                    // Priority 1: Exact work days target (those under target first, then those who met it)
+                    const aUnderTarget = a.exactWorkDays !== null && a.totalWork < a.exactWorkDays;
+                    const bUnderTarget = b.exactWorkDays !== null && b.totalWork < b.exactWorkDays;
+
+                    if (aUnderTarget && !bUnderTarget) return -1;
+                    if (!aUnderTarget && bUnderTarget) return 1;
+
+                    // Priority 2: Consecutive work days penalty
+                    const getConsecutivePenalty = (consecutive) => {
+                        if (consecutive >= 4) return 1000; // 5th+ day in a row
+                        if (consecutive === 3) return 100; // 4th day in a row
+                        return 0;
+                    };
+
+                    const penaltyA_consecutive = getConsecutivePenalty(a.consecutive);
+                    const penaltyB_consecutive = getConsecutivePenalty(b.consecutive);
+
+                    if (penaltyA_consecutive !== penaltyB_consecutive) {
+                        return penaltyA_consecutive - penaltyB_consecutive;
+                    }
+
+                    // Priority 3: Prefer continuing a streak (disfavor starting a new one if possible)
+                    // This is the core change to minimize 1-day isolated shifts
+                    if (a.consecutive > 0 && b.consecutive === 0) return -1; // Prefer A (continues streak)
+                    if (a.consecutive === 0 && b.consecutive > 0) return 1;  // Prefer B (continues streak)
+
+                    // Priority 4: Fewer consecutive days (within same penalty group and same streak-start status)
+                    if (a.consecutive !== b.consecutive) {
+                        return a.consecutive - b.consecutive;
+                    }
+                    
+                    // Priority 5: Lower total work days (general fairness)
+                    return a.totalWork - b.totalWork;
+                });
+
+                let assignedCount = 0;
+                const assignedToday = new Set();
+                const assignedWorkers = [];
+
+                // Separate available workers into new and experienced for pairing logic
+                const newWorkers = availableWorkersForDay.filter(w => w.isNew);
+                const experiencedWorkers = availableWorkersForDay.filter(w => !w.isNew);
+
+                // --- Assignment Strategy ---
+                // 1. Try to assign one experienced and one new worker
+                if (experiencedWorkers.length > 0 && newWorkers.length > 0) {
+                    const expCandidate = experiencedWorkers[0];
+                    const newCandidate = newWorkers[0];
+
+                    const expWouldExceedExactTarget = expCandidate.exactWorkDays !== null && (expCandidate.totalWork + 1 > expCandidate.exactWorkDays);
+                    const newWouldExceedExactTarget = newCandidate.exactWorkDays !== null && (newCandidate.totalWork + 1 > newCandidate.exactWorkDays);
+
+                    const expWouldBe5Consec = expCandidate.consecutive >= 4;
+                    const newWouldBe5Consec = newCandidate.consecutive >= 4;
+
+                    const canAssignExp = !expWouldExceedExactTarget && !expWouldBe5Consec;
+                    const canAssignNew = !newWouldExceedExactTarget && !newWouldBe5Consec;
+
+                    if (canAssignExp && canAssignNew) {
+                        assignedWorkers.push(expCandidate, newCandidate);
+                    }
+                }
+
+                // 2. If not enough assigned, try to assign two experienced workers
+                if (assignedWorkers.length < 2 && experiencedWorkers.length >= 2) {
+                    const exp1 = experiencedWorkers[0];
+                    const exp2 = experiencedWorkers[1];
+
+                    if (!assignedWorkers.includes(exp1) && !assignedWorkers.includes(exp2)) {
+                         const exp1WouldExceedExactTarget = exp1.exactWorkDays !== null && (exp1.totalWork + 1 > exp1.exactWorkDays);
+                         const exp2WouldExceedExactTarget = exp2.exactWorkDays !== null && (exp2.totalWork + 1 > exp2.exactWorkDays);
+                         const exp1WouldBe5Consec = exp1.consecutive >= 4;
+                         const exp2WouldBe5Consec = exp2.consecutive >= 4;
+
+                         const canAssignExp1 = !exp1WouldExceedExactTarget && !exp1WouldBe5Consec;
+                         const canAssignExp2 = !exp2WouldExceedExactTarget && !exp2WouldBe5Consec;
+
+                         if (canAssignExp1 && canAssignExp2) {
+                             assignedWorkers.push(exp1, exp2);
+                         }
+                    }
+                }
+
+                // 3. If not enough assigned, try to assign two new workers (least preferred pairing)
+                if (assignedWorkers.length < 2 && newWorkers.length >= 2) {
+                    const new1 = newWorkers[0];
+                    const new2 = newWorkers[1];
+
+                    if (!assignedWorkers.includes(new1) && !assignedWorkers.includes(new2)) {
+                         const new1WouldExceedExactTarget = new1.exactWorkDays !== null && (new1.totalWork + 1 > new1.exactWorkDays);
+                         const new2WouldExceedExactTarget = new2.exactWorkDays !== null && (new2.totalWork + 1 > new2.exactWorkDays);
+                         const new1WouldBe5Consec = new1.consecutive >= 4;
+                         const new2WouldBe5Consec = new2.consecutive >= 4;
+
+                         const canAssignNew1 = !new1WouldExceedExactTarget && !new1WouldBe5Consec;
+                         const canAssignNew2 = !new2WouldExceedExactTarget && !new2WouldBe5Consec;
+
+                         if (canAssignNew1 && canAssignNew2) {
+                             assignedWorkers.push(new1, new2);
+                         }
+                    }
+                }
+
+                // 4. Fallback: Assign any available workers if still not 2, even if it violates soft constraints
+                if (assignedWorkers.length < 2) {
+                    const remainingSpots = 2 - assignedWorkers.length;
+                    const currentAssignedNames = new Set(assignedWorkers.map(w => w.name));
+                    
+                    const unassignedAvailable = availableWorkersForDay.filter(w => !currentAssignedNames.has(w.name));
+                    
+                    for (let i = 0; i < unassignedAvailable.length && assignedWorkers.length < 2; i++) {
+                        assignedWorkers.push(unassignedAvailable[i]);
+                    }
+                }
+
+
+                // Apply the assignments to daySchedule and update counts
+                assignedWorkers.forEach(worker => {
+                    daySchedule[currentParticipantsData.indexOf(currentParticipantsData.find(p => p.name === worker.name))] = shiftType;
+                    workCounts.set(worker.name, workCounts.get(worker.name) + 1);
+                    consecutiveWorkDays.set(worker.name, worker.consecutive + 1);
+                    assignedToday.add(worker.name);
+                });
+
+
+                // Reset consecutive work days for those not assigned (and not on holiday)
+                currentParticipantsData.forEach(p => {
+                    if (!assignedToday.has(p.name) && daySchedule[currentParticipantsData.indexOf(p)] !== 'Urlop') {
+                        consecutiveWorkDays.set(p.name, 0);
+                    }
+                });
+                
+                generatedSchedule.push(daySchedule);
+            }
+            renderSchedule(generatedSchedule);
+            saveScheduleState();
+        }
+
+
+        function updateConsecutiveWorkHighlighting() {
+            const currentPersonNames = participants.map(p => p.name);
+            const rows = scheduleTableBody.querySelectorAll('tr');
+
+            rows.forEach(row => {
+                for (let i = 2; i < row.cells.length; i++) {
+                    const cell = row.cells[i];
+                    cell.classList.remove('bg-yellow-200', 'bg-red-200', 'bg-rose-100');
+                    const select = cell.querySelector('.shift-select');
+                    if (select) {
+                        select.classList.remove('font-bold');
+                        if (isWorkShift(select.value)) {
+                            select.classList.add('font-bold');
+                        }
+                        if (select.value === 'Urlop') {
+                            cell.classList.add('bg-rose-100');
+                        }
+                    }
+                }
+            });
+
+            currentPersonNames.forEach((_, personIndex) => {
+                let currentConsecutiveWorkDays = 0;
+                let workBlockStartRowIndex = -1;
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (personIndex + 2 >= row.cells.length) {
+                        currentConsecutiveWorkDays = 0;
+                        workBlockStartRowIndex = -1;
+                        continue;
+                    }
+                    const cell = row.cells[personIndex + 2];
+                    const select = cell.querySelector('.shift-select');
+
+                    if (select && isWorkShift(select.value)) {
+                        if (currentConsecutiveWorkDays === 0) {
+                            workBlockStartRowIndex = i;
+                        }
+                        currentConsecutiveWorkDays++;
+                    } else {
+                        if (currentConsecutiveWorkDays > 0) {
+                            if (currentConsecutiveWorkDays === 4) {
+                                for (let j = 0; j < 4; j++) {
+                                    if (workBlockStartRowIndex + j < rows.length) {
+                                        rows[workBlockStartRowIndex + j].cells[personIndex + 2].classList.add('bg-yellow-200');
+                                    }
+                                }
+                            } else if (currentConsecutiveWorkDays > 4) {
+                                for (let j = 0; j < currentConsecutiveWorkDays; j++) {
+                                    if (workBlockStartRowIndex + j < rows.length) {
+                                        rows[workBlockStartRowIndex + j].cells[personIndex + 2].classList.add('bg-red-200');
+                                    }
+                                }
+                            }
+                        }
+                        currentConsecutiveWorkDays = 0;
+                        workBlockStartRowIndex = -1;
+                    }
+                }
+
+                if (currentConsecutiveWorkDays > 0) {
+                    if (currentConsecutiveWorkDays === 4) {
+                        for (let j = 0; j < 4; j++) {
+                            if (workBlockStartRowIndex + j < rows.length) {
+                                rows[workBlockStartRowIndex + j].cells[personIndex + 2].classList.add('bg-yellow-200');
+                            }
+                        }
+                    } else if (currentConsecutiveWorkDays > 4) {
+                        for (let j = 0; j < currentConsecutiveWorkDays; j++) {
+                            if (workBlockStartRowIndex + j < rows.length) {
+                                rows[workBlockStartRowIndex + j].cells[personIndex + 2].classList.add('bg-red-200');
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Save schedule state to localStorage
+        function saveScheduleState() {
+            const state = {
+                month: monthSelect.value,
+                year: yearSelect.value,
+                participants: participants.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    holidays: p.holidays,
+                    exactWorkDays: p.exactWorkDays,
+                    isNew: p.isNew
+                })),
+                scheduleData: []
+            };
+
+            const rows = scheduleTableBody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const dayData = [];
+                for (let i = 0; i < participants.length; i++) {
+                    const cell = row.cells[i + 2];
+                    const select = cell ? cell.querySelector('.shift-select') : null;
+                    dayData.push(select ? select.value : 'Wolne');
+                }
+                state.scheduleData.push(dayData);
+            });
+            localStorage.setItem('grafikSchedulerState', JSON.stringify(state));
+        }
+
+        // Load schedule state from localStorage
+        function loadScheduleState() {
+            const savedState = localStorage.getItem('grafikSchedulerState');
+            if (savedState) {
+                try {
+                    const state = JSON.parse(savedState);
+                    
+                    monthSelect.value = state.month;
+                    yearSelect.value = state.year;
+                    
+                    participants = state.participants.map(p => ({ 
+                        id: p.id, 
+                        name: p.name, 
+                        holidays: p.holidays, 
+                        exactWorkDays: p.exactWorkDays !== undefined ? p.exactWorkDays : '',
+                        isNew: p.isNew !== undefined ? p.isNew : false
+                    }));
+                    nextPersonId = participants.length > 0 ? Math.max(...participants.map(p => parseInt(p.id.split('-')[1]))) + 1 : 1;
+
+                    renderPersonInputs();
+                    renderSchedule(state.scheduleData);
+                    return true;
+                } catch (e) {
+                    console.error("Failed to load schedule state from localStorage:", e);
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        function exportTableToCSV() {
+            const selectedMonth = parseInt(monthSelect.value);
+            const selectedYear = parseInt(yearSelect.value);
+            const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+            const currentPersonNames = participants.map(p => p.name);
+            const monthName = new Date(selectedYear, selectedMonth, 1).toLocaleString('pl-PL', { month: 'long', year: 'numeric' });
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+
+            csvContent += `Grafik na ${monthName}\r\n`;
+
+            let header = "Data,Dzień tygodnia";
+            currentPersonNames.forEach(name => {
+                header += `,${name}`;
+            });
+            csvContent += header + "\r\n";
+
+            const rows = scheduleTableBody.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                const date = new Date(selectedYear, selectedMonth, index + 1);
+                const shortDateString = date.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+                const dayOfWeek = date.toLocaleDateString('pl-PL', { weekday: 'long' });
+
+                let rowData = `${shortDateString},${dayOfWeek}`;
+                for (let i = 0; i < currentPersonNames.length; i++) {
+                    const cell = row.cells[i + 2];
+                    const select = cell ? cell.querySelector('.shift-select') : null;
+                    rowData += `,${select ? select.value : ''}`;
+                }
+                csvContent += rowData + "\r\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `grafik_${selectedYear}_${selectedMonth + 1}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportTableToImage() {
+            const selectedMonth = parseInt(monthSelect.value);
+            const selectedYear = parseInt(yearSelect.value);
+            const monthName = new Date(selectedYear, selectedMonth, 1).toLocaleString('pl-PL', { month: 'long', year: 'numeric' });
+
+            const selectsToRestore = [];
+            const cellsToRestoreClasses = [];
+            const selectsToRestoreFontBold = [];
+
+            // Store original widths and apply temporary narrower widths
+            const cellsToRestoreWidth = [];
+            const headerCells = scheduleTableHead.querySelectorAll('th');
+            const bodyRows = scheduleTableBody.querySelectorAll('tr');
+
+            // Define target widths for image generation (further reduced)
+            const dataColumnWidth = '25px'; // Minimal width for DD.MM
+            const dayOfWeekColumnWidth = '35px'; // Minimal width for "pon."
+            const personColumnWidth = '35px'; // Minimal width for "10-21" or "Urlop"
+
+            // Adjust header cells
+            for (let i = 0; i < headerCells.length; i++) {
+                const cell = headerCells[i];
+                cellsToRestoreWidth.push({ element: cell, originalWidth: cell.style.width, originalMinWidth: cell.style.minWidth, originalMaxWidth: cell.style.maxWidth, originalOverflow: cell.style.overflow, originalWhiteSpace: cell.style.whiteSpace, originalWordBreak: cell.style.wordBreak });
+                
+                if (i === 0) {
+                    cell.style.width = dataColumnWidth;
+                    cell.style.minWidth = dataColumnWidth;
+                    cell.style.maxWidth = dataColumnWidth;
+                } else if (i === 1) {
+                    cell.style.width = dayOfWeekColumnWidth;
+                    cell.style.minWidth = dayOfWeekColumnWidth;
+                    cell.style.maxWidth = dayOfWeekColumnWidth;
+                } else {
+                    cell.style.width = personColumnWidth;
+                    cell.style.minWidth = personColumnWidth;
+                    cell.style.maxWidth = personColumnWidth;
+                }
+                cell.style.overflow = 'visible';
+                cell.style.whiteSpace = 'normal';
+                cell.style.wordBreak = 'break-word'; // Ensure text wraps aggressively
+            }
+
+            // Adjust body cells
+            bodyRows.forEach(row => {
+                const rowCells = row.querySelectorAll('td');
+                for (let i = 0; i < rowCells.length; i++) {
+                    const cell = rowCells[i];
+                    cellsToRestoreWidth.push({ element: cell, originalWidth: cell.style.width, originalMinWidth: cell.style.minWidth, originalMaxWidth: cell.style.maxWidth, originalOverflow: cell.style.overflow, originalWhiteSpace: cell.style.whiteSpace, originalWordBreak: cell.style.wordBreak });
+                    
+                    if (i === 0) {
+                        cell.style.width = dataColumnWidth;
+                        cell.style.minWidth = dataColumnWidth;
+                        cell.style.maxWidth = dataColumnWidth;
+                    } else if (i === 1) {
+                        cell.style.width = dayOfWeekColumnWidth;
+                        cell.style.minWidth = dayOfWeekColumnWidth;
+                        cell.style.maxWidth = dayOfWeekColumnWidth;
+                    } else {
+                        cell.style.width = personColumnWidth;
+                        cell.style.minWidth = personColumnWidth;
+                        cell.style.maxWidth = personColumnWidth;
+                    }
+                    cell.style.overflow = 'visible';
+                    cell.style.whiteSpace = 'normal';
+                    cell.style.wordBreak = 'break-word'; // Ensure text wraps aggressively
+                }
+            });
+
+
+            const selects = document.querySelectorAll('.shift-select');
+            selects.forEach(select => {
+                select.style.display = 'none';
+                const span = document.createElement('span');
+                span.className = 'temp-text-for-image';
+                if (select.value !== 'Wolne') {
+                    span.textContent = select.value;
+                    if (isWorkShift(select.value)) {
+                        span.classList.add('font-bold');
+                    }
+                } else {
+                    span.textContent = '';
+                }
+                select.parentNode.insertBefore(span, select);
+                selectsToRestore.push({ select: select, span: span });
+
+                if (select.classList.contains('font-bold')) {
+                    selectsToRestoreFontBold.push(select);
+                    select.classList.remove('font-bold');
+                }
+            });
+
+            const rows = scheduleTableBody.querySelectorAll('tr');
+            rows.forEach(row => {
+                for (let i = 2; i < row.cells.length; i++) {
+                    const cell = row.cells[i];
+                    if (cell.classList.contains('bg-rose-100')) {
+                        cellsToRestoreClasses.push({ cell: cell, classes: ['bg-rose-100'] });
+                        cell.classList.remove('bg-rose-100');
+                    }
+                    if (cell.classList.contains('bg-yellow-200') || cell.classList.contains('bg-red-200')) {
+                        cellsToRestoreClasses.push({ cell: cell, classes: ['bg-yellow-200', 'bg-red-200'] });
+                        cell.classList.remove('bg-yellow-200', 'bg-red-200');
+                    }
+                }
+            });
+
+            html2canvas(scheduleTable, {
+                scale: window.devicePixelRatio * 2,
+                useCORS: true,
+                logging: false
+            }).then(canvas => {
+                selectsToRestore.forEach(item => {
+                    item.select.style.display = '';
+                    if (item.span) {
+                        item.span.remove();
+                    }
+                });
+
+                cellsToRestoreClasses.forEach(item => {
+                    item.classes.forEach(cls => item.cell.classList.add(cls));
+                });
+
+                selectsToRestoreFontBold.forEach(select => {
+                    select.classList.add('font-bold');
+                });
+
+                // Restore column widths
+                cellsToRestoreWidth.forEach(item => {
+                    item.element.style.width = item.originalWidth;
+                    item.element.style.minWidth = item.originalMinWidth;
+                    item.element.style.maxWidth = item.originalMaxWidth;
+                    item.element.style.overflow = item.originalOverflow;
+                    item.element.style.whiteSpace = item.originalWhiteSpace;
+                    item.element.style.wordBreak = item.originalWordBreak; // Restore original word-break
+                });
+
+                const link = document.createElement('a');
+                link.download = `grafik_${selectedYear}_${selectedMonth + 1}.png`;
+                link.href = canvas.toDataURL('image/png');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        }
+
+        monthSelect.addEventListener('change', () => {
+            renderSchedule();
+            saveScheduleState();
+        });
+        yearSelect.addEventListener('change', () => {
+            renderSchedule();
+            saveScheduleState();
+        });
+        
+        addPersonBtn.addEventListener('click', addPerson);
+        newPersonNameInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                addPerson();
+            }
+        });
+        removeLastPersonBtn.addEventListener('click', removeLastPerson);
+
+        generateScheduleBtn.addEventListener('click', generateFairSchedule);
+        restoreScheduleBtn.addEventListener('click', loadScheduleState);
+        exportExcelBtn.addEventListener('click', exportTableToCSV);
+        exportImageBtn.addEventListener('click', exportTableToImage);
+
+        populateMonthYearSelectors();
+        if (!loadScheduleState()) {
+            participants = [
+                { id: 'person-1', name: 'Osoba 1', holidays: '', exactWorkDays: '', isNew: false },
+                { id: 'person-2', name: 'Osoba 2', holidays: '', exactWorkDays: '', isNew: false }
+            ];
+            nextPersonId = 3;
+            renderPersonInputs();
+            renderSchedule();
+            saveScheduleState();
+        }
+    });
+    </script>
+</body>
+</html>
